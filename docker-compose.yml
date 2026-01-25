@@ -1,0 +1,51 @@
+services:
+  # --- GROUP 1: SECURE REAL SERVICES (Clean Traffic) ---
+  # BU GRUP: Güvenli olması gereken, saldırılardan koruduğumuz gerçek web servisleridir.
+  
+  waf:
+    # Web Application Firewall (WAF) - Kapıdaki güvenlik görevlisi.
+    # Owasp Core Rule Set (CRS) yüklü Nginx kullanır.
+    # SQL Injection, XSS gibi saldırıları tespit edip engeller.
+    image: owasp/modsecurity-crs:nginx
+    container_name: waf
+    ports:
+      - "80:80"     # Sunucunun 80 (HTTP) portunu dinler ve trafiği karşılar.
+      - "443:80"    # Sunucunun 443 (HTTPS) trafiğini de karşılar (Şimdilik SSL sonlandırmadan 80'e aktarır).
+    volumes:
+      # Varsayılan nginx ayarını boş bir dosya ile eziyoruz (Çakışmayı önlemek için).
+      - ./waf/empty:/etc/nginx/templates/conf.d/default.conf.template
+      # Kendi özel yönlendirme kuralımızı (proxy_pass) yüklüyoruz.
+      - ./waf/default.conf:/etc/nginx/conf.d/custom.conf
+    networks:
+      - waf_net     # Sadece güvenli ağa bağlıdır, honeypot'u görmez.
+    environment:
+      - PARANOIA=1  # Güvenlik seviyesi (1: Standart, 4: Çok Sıkı).
+
+  real_server:
+    # WAF'ın koruduğu ASIL sunucu (Örnek olarak Nginx).
+    # Dış dünyaya kapalıdır, sadece WAF üzerinden erişilebilir.
+    image: nginx:alpine
+    container_name: real_server
+    networks:
+      - waf_net # WAF ile aynı ağdadır.
+
+  # --- GROUP 2: HONEYPOT (Dirty Traffic) ---
+  # BU GRUP: Hackerları tuzağa düşüren sahte sistemdir.
+  
+  portspoof:
+    # Honeypot Yazılımı. 65.000 portun hepsini açıkmış gibi gösterir.
+    # Saldırganı yavaşlatır ve sahte bilgiler (Cisco, MySQL vb.) gönderir.
+    build: .
+    container_name: portspoof
+    cap_add:
+      - NET_ADMIN   # iptables (firewall) kurallarını yönetebilmek için yetki gerekir.
+    network_mode: "host" 
+    # "host" modu: Konteyner kendi sanal ağını değil, doğrudan sunucunun ağ kartını kullanır.
+    # Bu sayede 65.000 portu tek tek tanımlamaya gerek kalmadan hepsini dinleyebilir.
+    # (Hangi portun dinleneceği entrypoint.sh içindeki iptables kurallarıyla belirlenir).
+
+networks:
+  waf_net:
+    # WAF ve Real Server'ın konuştuğu özel köprü ağı.
+    driver: bridge
+
