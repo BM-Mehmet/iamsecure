@@ -29,6 +29,7 @@ RUN mkdir build && \
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
 
 # Expose the default Portspoof port (though iptables will redirect everything)
